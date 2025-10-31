@@ -1,10 +1,26 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import time, threading, uuid
 
+# Initialize app
 app = FastAPI()
+
+# ---- CORS FIX ----
+# This allows your Base44 web app to send requests to your backend
+# (especially the OPTIONS request that was failing earlier)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],          # For testing; later restrict to your Base44 app domain
+    allow_credentials=True,
+    allow_methods=["*"],          # Enables POST, GET, OPTIONS, etc.
+    allow_headers=["*"],
+)
+# -------------------
+
 JOBS = {}
 
+# --- Models ---
 class Clip(BaseModel):
     url: str
 
@@ -22,17 +38,23 @@ class CreateJob(BaseModel):
     params: Params
     webhook_url: str | None = None
 
+
 @app.get("/health")
 def health():
     return {"ok": True}
 
+
 def fake_worker(job_id: str):
+    """Simulates video processing for demo purposes."""
     JOBS[job_id]["status"] = "processing"
     for p in range(1, 6):
         time.sleep(2)
         JOBS[job_id]["progress"] = p * 20
     JOBS[job_id]["status"] = "ready"
-    JOBS[job_id]["download_url"] = "https://sample-videos.com/video321/mp4/360/big_buck_bunny_360p_1mb.mp4"
+    JOBS[job_id]["download_url"] = (
+        "https://sample-videos.com/video321/mp4/360/big_buck_bunny_360p_1mb.mp4"
+    )
+
 
 @app.post("/jobs")
 def create_job(body: CreateJob):
@@ -40,6 +62,7 @@ def create_job(body: CreateJob):
     JOBS[job_id] = {"status": "queued", "progress": 0, "download_url": None, "error": None}
     threading.Thread(target=fake_worker, args=(job_id,), daemon=True).start()
     return {"job_id": job_id, "status": JOBS[job_id]["status"]}
+
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str):
